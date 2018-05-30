@@ -4,3 +4,5 @@ version = "0.1.0"
 authors = ["root"]
 
 [dependencies]
+sdl2 = "0.31"
+gl = "0.6.0"
