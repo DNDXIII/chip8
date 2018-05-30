@@ -1,3 +1,5 @@
+use gpu::Gpu;
+use sdl2;
 use std::fs::File;
 use std::io::prelude::*;
 use std::process;
@@ -18,13 +20,12 @@ pub struct Cpu {
     //keypad
     key: [u8; 16],
 
-    //graphics
-    gfx: [u8; 2048],
-    draw_flag: bool,
+    //display
+    pub gpu: Gpu,
 }
 
 impl Cpu {
-    pub fn new() -> Cpu {
+    pub fn new(_sdlcontext: &sdl2::Sdl) -> Cpu {
         let mut cpu = Cpu {
             opcode: 0,
             memory: [0; 4096],
@@ -36,8 +37,7 @@ impl Cpu {
             dt: 0,
             st: 0,
             key: [0; 16],
-            gfx: [0; 2048],
-            draw_flag: true,
+            gpu: Gpu::new(_sdlcontext),
         };
 
         //fill the fontset
@@ -75,11 +75,7 @@ impl Cpu {
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x000F {
                 0x0000 => {
-                    //clear screen
-                    for i in 0..2048 {
-                        self.gfx[i] = 0;
-                    }
-                    self.draw_flag = true;
+                    self.gpu.clear_screen();
                     self.pc += 2;
                 }
                 0x000E => {
@@ -147,9 +143,22 @@ impl Cpu {
                 self.pc += 2;
             }
 
+            0xD000 => {
+                //DRW Vx, Vy, nibble
+                let size = self.opcode & 0x000F;
+                let x = self.opcode & 0x0F00;
+                let y = self.opcode & 0x00F0;
+                self.v[15] = self.gpu.draw_sprite(
+                    x as usize,
+                    y as usize,
+                    &self.memory[self.i..self.i + (size as usize)],
+                );
+                self.pc += 2;
+            }
+
             _ => {
                 println!("Not Implemented {:x?}", self.opcode);
-                process::exit(0x0100);
+                //process::exit(0x0100);
             }
         }
         self.pc += 2;
