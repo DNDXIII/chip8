@@ -2,6 +2,8 @@ use sdl2;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 
+use std::{thread, time};
+
 static SCALE: u32 = 10;
 
 pub struct Gpu {
@@ -13,7 +15,7 @@ pub struct Gpu {
 
 impl Gpu {
     pub fn new(_sdlcontext: &sdl2::Sdl) -> Gpu {
-        let mut gpu = Gpu {
+        let gpu = Gpu {
             draw_flag: true,
             gfx: [0; 2048],
             canvas: _sdlcontext
@@ -45,17 +47,14 @@ impl Gpu {
     pub fn draw_sprite(&mut self, x: usize, y: usize, sprite: &[u8]) -> u8 {
         let mut collision: u8 = 0;
         let n = sprite.len() as usize;
-        let start: usize = y * 64 + x;
-
-        println!("x:{}  y:{} ", x, y);
 
         for j in 0..n {
             for i in 0..8 {
                 if (sprite[j] & (0x80 >> i)) != 0 {
-                    if self.gfx[(start + 64 * n) + i] == 1 {
-                        collision = 1
+                    if self.gfx[(x + i + ((y + j) * 64))] == 1 {
+                        collision = 1;
                     }
-                    self.gfx[(start + 64 * n) + 1] ^= 1;
+                    self.gfx[(x + i + ((y + j) * 64))] ^= 1;
                 }
             }
         }
@@ -65,8 +64,25 @@ impl Gpu {
     }
 
     pub fn render_screen(&mut self) {
-        if self.draw_flag {
+        if !self.draw_flag {
             return;
         }
+        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
+
+        for i in 0..32 {
+            for j in 0..64 {
+                if self.gfx[i * 64 + j] == 1 {
+                    let x = (j as i32) * (SCALE as i32);
+                    let y = (i as i32) * (SCALE as i32);
+                    self.canvas.fill_rect(Rect::new(x, y, SCALE, SCALE));
+                }
+            }
+        }
+        self.canvas.present();
+
+        // For Debugging
+        //thread::sleep(time::Duration::from_secs(3));
+
+        self.draw_flag = false;
     }
 }

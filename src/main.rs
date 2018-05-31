@@ -1,3 +1,4 @@
+extern crate rand;
 extern crate sdl2;
 
 use sdl2::event::Event;
@@ -19,14 +20,12 @@ fn main() {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    'main: loop {
-        'event: loop {
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => break 'main,
-                    Event::KeyDown { keycode, .. } => println!("ola"),
-                    _ => break 'event,
-                }
+    'event: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => break 'event,
+                Event::KeyDown { keycode, .. } => println!("ola"),
+                _ => {}
             }
         }
 

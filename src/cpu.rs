@@ -1,4 +1,5 @@
 use gpu::Gpu;
+use rand::{thread_rng, Rng};
 use sdl2;
 use std::fs::File;
 use std::io::prelude::*;
@@ -71,7 +72,15 @@ impl Cpu {
     }
 
     pub fn execute_opcode(&mut self) {
-        println!("opcode : {:x?}  pc {}", self.opcode, self.pc);
+        /*
+        println!("opcode : {:x?}  pc {:x?}", self.opcode, self.pc);
+        for i in 0..15 {
+            print!("v{}: {:x?} | ", i, self.v[i]);
+        }
+        println!("");
+        println!("i: {:x?}", self.i);
+        */
+
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x000F {
                 0x0000 => {
@@ -84,7 +93,7 @@ impl Cpu {
                     self.pc = self.stack[self.sp] as usize;
                     self.pc += 2;
                 }
-                _ => println!("Not Implemented {}", self.opcode),
+                _ => println!("Not Implemented {:x?}", self.opcode),
             },
 
             0x1000 => {
@@ -101,7 +110,7 @@ impl Cpu {
 
             0x3000 => {
                 //SE Vx byte
-                let x = ((self.opcode & 0x0F00) >> 8) as usize;
+                let x = self.op_x();
                 if self.v[x] == (self.opcode & 0x00FF) as u8 {
                     self.pc += 2;
                 }
@@ -110,7 +119,7 @@ impl Cpu {
 
             0x4000 => {
                 //SNE Vx, byte
-                let x = ((self.opcode & 0x0F00) >> 8) as usize;
+                let x = self.op_x();
                 if self.v[x] != (self.opcode & 0x00FF) as u8 {
                     self.pc += 2;
                 }
@@ -119,8 +128,8 @@ impl Cpu {
 
             0x5000 => {
                 //SE Vx, Vy
-                let x = ((self.opcode & 0x0F00) >> 8) as usize;
-                let y = ((self.opcode & 0x00F0) >> 4) as usize;
+                let x = self.op_x();
+                let y = self.op_y();
 
                 if self.v[x] == self.v[y] {
                     self.pc += 2;
@@ -131,37 +140,129 @@ impl Cpu {
 
             0x6000 => {
                 //LD Vx, byte
-                let x = ((self.opcode & 0x0F00) >> 8) as usize;
-                self.v[x] = (self.opcode & 0x00FF) as u8;
+                self.v[self.op_x()] = (self.opcode & 0x00FF) as u8;
                 self.pc += 2;
             }
 
             0x7000 => {
                 //ADD Vx, byte
-                let x = ((self.opcode & 0x0F00) >> 8) as usize;
-                self.v[x] += (self.opcode & 0x00FF) as u8;
+                self.v[self.op_x()] += (self.opcode & 0x00FF) as u8;
+                self.pc += 2;
+            }
+
+            0x8000 => match self.opcode & 0x000F {
+                0x0002 => {
+                    self.v[self.op_x()] &= self.v[self.op_y()];
+                    self.pc += 2;
+                }
+
+                _ => println!("Not Implemented {:x?}", self.opcode),
+            },
+
+            0xA000 => {
+                //LD I, addr
+                self.i = (self.opcode & 0x0FFF) as usize;
+                self.pc += 2;
+            }
+
+            0xC000 => {
+                //RND Vx, byte
+                let random_number: u8 = thread_rng().gen();
+                self.v[self.op_x()] = (self.opcode & 0x00FF) as u8 & random_number;
                 self.pc += 2;
             }
 
             0xD000 => {
                 //DRW Vx, Vy, nibble
                 let size = self.opcode & 0x000F;
-                let x = self.opcode & 0x0F00;
-                let y = self.opcode & 0x00F0;
-                self.v[15] = self.gpu.draw_sprite(
+                let x = self.v[self.op_x()];
+                let y = self.v[self.op_y()];
+                self.v[0xF] = self.gpu.draw_sprite(
                     x as usize,
                     y as usize,
-                    &self.memory[self.i..self.i + (size as usize)],
+                    &self.memory[self.i..(self.i + (size as usize))],
                 );
                 self.pc += 2;
             }
 
+            0xE000 => {
+                match self.opcode & 0x00FF {
+                    0x009E => {
+                        println!("Not Implemented {:x?}", self.opcode);
+                    }
+
+                    0x00A1 => {
+                        // SKNP Vx
+                        if self.key[self.v[self.op_x()] as usize] == 0 {
+                            self.pc += 2;
+                        }
+                        self.pc += 2;
+                    }
+
+                    _ => println!("Not Implemented {:x?}", self.opcode),
+                }
+            }
+
+            0xF000 => match self.opcode & 0x00FF {
+                0x0007 => {
+                    //LD Vx, DT
+                    self.v[self.op_x()] = self.dt;
+                    self.pc += 2;
+                }
+
+                0x0015 => {
+                    //LD DT, Vx
+                    self.dt = self.v[self.op_x()];
+                    self.pc += 2;
+                }
+
+                0x0029 => {
+                    //LD F, Vx
+                    self.i = (self.v[self.op_x()] as usize) * 5;
+                    self.pc += 2;
+                }
+
+                0x0033 => {
+                    //LD B, Vx
+                    let val = self.v[self.op_x()];
+
+                    self.memory[self.i] = val / 100;
+                    self.memory[self.i + 1] = val / 10 % 10;
+                    self.memory[self.i + 2] = val % 100 % 10;
+
+                    self.pc += 2;
+                }
+
+                0x0065 => {
+                    //LD Vx, [I]
+                    let n = self.op_x();
+
+                    for i in 0..n {
+                        self.v[i] = self.memory[self.i + i];
+                    }
+                    self.i += n + 1;
+                    self.pc += 2;
+                }
+
+                _ => {
+                    println!("Not Implemented {:x?}", self.opcode);
+                    process::exit(0x0100);
+                }
+            },
+
             _ => {
                 println!("Not Implemented {:x?}", self.opcode);
-                //process::exit(0x0100);
+                self.pc += 2;
+                process::exit(0x0100);
             }
         }
-        self.pc += 2;
+    }
+
+    fn op_x(&self) -> usize {
+        ((self.opcode & 0x0F00) >> 8) as usize
+    }
+    fn op_y(&self) -> usize {
+        ((self.opcode & 0x00F0) >> 4) as usize
     }
 
     pub fn load_game(&mut self, s: String) {
