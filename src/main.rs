@@ -3,6 +3,7 @@ extern crate sdl2;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use std::{thread, time};
 
 use cpu::Cpu;
 
@@ -24,12 +25,28 @@ fn main() {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'event,
-                Event::KeyDown { keycode, .. } => println!("ola"),
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num1),
+                    ..
+                } => cpu.key[0x1] = 1,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Q),
+                    ..
+                } => cpu.key[0x4] = 1,
+                Event::KeyUp {
+                    keycode: Some(Keycode::Num1),
+                    ..
+                } => cpu.key[0x1] = 0,
+                Event::KeyUp {
+                    keycode: Some(Keycode::Q),
+                    ..
+                } => cpu.key[0x4] = 0,
                 _ => {}
             }
         }
 
         cpu.emulate_cycle();
         cpu.gpu.render_screen();
+        for _ in 0..30000 {}
     }
 }

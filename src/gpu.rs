@@ -2,8 +2,6 @@ use sdl2;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 
-use std::{thread, time};
-
 static SCALE: u32 = 10;
 
 pub struct Gpu {
@@ -59,7 +57,11 @@ impl Gpu {
             }
         }
 
+        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
+        self.canvas.clear();
+
         self.draw_flag = true;
+
         collision
     }
 
@@ -67,6 +69,11 @@ impl Gpu {
         if !self.draw_flag {
             return;
         }
+
+        //first clear screen
+        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
+        self.canvas.clear();
+
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
 
         for i in 0..32 {

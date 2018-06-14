@@ -19,7 +19,7 @@ pub struct Cpu {
     st: u8,
 
     //keypad
-    key: [u8; 16],
+    pub key: [u8; 16],
 
     //display
     pub gpu: Gpu,
@@ -61,7 +61,7 @@ impl Cpu {
 
         if self.st > 0 {
             if self.st == 1 {
-                println!("BEEP");
+                // println!("BEEP");
             }
             self.st -= 1;
         }
@@ -93,7 +93,10 @@ impl Cpu {
                     self.pc = self.stack[self.sp] as usize;
                     self.pc += 2;
                 }
-                _ => println!("Not Implemented {:x?}", self.opcode),
+                _ => {
+                    println!("Not Implemented {:x?}", self.opcode);
+                    process::exit(0x0100);
+                }
             },
 
             0x1000 => {
@@ -119,8 +122,7 @@ impl Cpu {
 
             0x4000 => {
                 //SNE Vx, byte
-                let x = self.op_x();
-                if self.v[x] != (self.opcode & 0x00FF) as u8 {
+                if self.v[self.op_x()] != (self.opcode & 0x00FF) as u8 {
                     self.pc += 2;
                 }
                 self.pc += 2;
@@ -146,17 +148,49 @@ impl Cpu {
 
             0x7000 => {
                 //ADD Vx, byte
-                self.v[self.op_x()] += (self.opcode & 0x00FF) as u8;
+                self.v[self.op_x()] = self.v[self.op_x()]
+                    .overflowing_add((self.opcode & 0x00FF) as u8)
+                    .0;
+
                 self.pc += 2;
             }
 
             0x8000 => match self.opcode & 0x000F {
+                0x0000 => {
+                    // Set Vx = Vy
+                    self.v[self.op_x()] = self.v[self.op_y()];
+                    self.pc += 2;
+                }
+
                 0x0002 => {
+                    // Set Vx = Vx AND Vy
                     self.v[self.op_x()] &= self.v[self.op_y()];
                     self.pc += 2;
                 }
 
-                _ => println!("Not Implemented {:x?}", self.opcode),
+                0x0004 => {
+                    // Set Vx = Vx + Vy, set VF = carry.
+                    // (result, overflow)
+                    let res = self.v[self.op_x()].overflowing_add(self.v[self.op_y()]);
+
+                    self.v[15] = if res.1 { 1 } else { 0 };
+                    self.v[self.op_x()] = res.0;
+                    self.pc += 2;
+                }
+
+                0x0005 => {
+                    //Set Vx = Vx - Vy, set VF = NOT borrow
+                    let res = self.v[self.op_x()].overflowing_sub(self.v[self.op_y()]);
+
+                    self.v[15] = if res.1 { 0 } else { 1 };
+                    self.v[self.op_x()] = res.0;
+                    self.pc += 2;
+                }
+
+                _ => {
+                    println!("Not Implemented {:x?}", self.opcode);
+                    process::exit(0x0100);
+                }
             },
 
             0xA000 => {
@@ -177,7 +211,7 @@ impl Cpu {
                 let size = self.opcode & 0x000F;
                 let x = self.v[self.op_x()];
                 let y = self.v[self.op_y()];
-                self.v[0xF] = self.gpu.draw_sprite(
+                self.v[15] = self.gpu.draw_sprite(
                     x as usize,
                     y as usize,
                     &self.memory[self.i..(self.i + (size as usize))],
@@ -199,7 +233,10 @@ impl Cpu {
                         self.pc += 2;
                     }
 
-                    _ => println!("Not Implemented {:x?}", self.opcode),
+                    _ => {
+                        println!("Not Implemented {:x?}", self.opcode);
+                        process::exit(0x0100);
+                    }
                 }
             }
 
@@ -243,6 +280,11 @@ impl Cpu {
                     self.i += n + 1;
                     self.pc += 2;
                 }
+                0x0018 => {
+                    // Set sound timer = Vx
+                    self.st = self.v[self.op_x()];
+                    self.pc += 2;
+                }
 
                 _ => {
                     println!("Not Implemented {:x?}", self.opcode);
@@ -252,7 +294,6 @@ impl Cpu {
 
             _ => {
                 println!("Not Implemented {:x?}", self.opcode);
-                self.pc += 2;
                 process::exit(0x0100);
             }
         }
