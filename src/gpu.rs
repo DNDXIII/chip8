@@ -37,9 +37,6 @@ impl Gpu {
         for i in 0..2048 {
             self.gfx[i] = 0
         }
-        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
-        self.canvas.clear();
-        self.canvas.present();
     }
 
     pub fn draw_sprite(&mut self, x: usize, y: usize, sprite: &[u8]) -> u8 {
@@ -49,16 +46,19 @@ impl Gpu {
         for j in 0..n {
             for i in 0..8 {
                 if (sprite[j] & (0x80 >> i)) != 0 {
-                    if self.gfx[(x + i + ((y + j) * 64))] == 1 {
+                    let mut z = x + i + ((y + j) * 64);
+                    // because the value must be able to overflow
+                    if z >= 2048 {
+                        z = z % 2048;
+                    }
+
+                    if self.gfx[z] == 1 {
                         collision = 1;
                     }
-                    self.gfx[(x + i + ((y + j) * 64))] ^= 1;
+                    self.gfx[z] ^= 1;
                 }
             }
         }
-
-        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
-        self.canvas.clear();
 
         self.draw_flag = true;
 
@@ -81,14 +81,11 @@ impl Gpu {
                 if self.gfx[i * 64 + j] == 1 {
                     let x = (j as i32) * (SCALE as i32);
                     let y = (i as i32) * (SCALE as i32);
-                    self.canvas.fill_rect(Rect::new(x, y, SCALE, SCALE));
+                    self.canvas.fill_rect(Rect::new(x, y, SCALE, SCALE)).ok();
                 }
             }
         }
         self.canvas.present();
-
-        // For Debugging
-        //thread::sleep(time::Duration::from_secs(3));
 
         self.draw_flag = false;
     }

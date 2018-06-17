@@ -79,8 +79,7 @@ impl Cpu {
         }
         println!("");
         println!("i: {:x?}", self.i);
-        */
-
+         */
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x000F {
                 0x0000 => {
@@ -155,48 +154,84 @@ impl Cpu {
                 self.pc += 2;
             }
 
-            0x8000 => match self.opcode & 0x000F {
-                0x0000 => {
-                    // Set Vx = Vy
-                    self.v[self.op_x()] = self.v[self.op_y()];
+            0x8000 => {
+                match self.opcode & 0x000F {
+                    0x0000 => {
+                        // Set Vx = Vy
+                        self.v[self.op_x()] = self.v[self.op_y()];
+                    }
+
+                    0x0001 => {
+                        // Set Vx = Vx OR Vy
+                        self.v[self.op_x()] |= self.v[self.op_y()];
+                    }
+
+                    0x0002 => {
+                        // Set Vx = Vx AND Vy
+                        self.v[self.op_x()] &= self.v[self.op_y()];
+                    }
+
+                    0x0003 => {
+                        // Set Vx = Vx XOR Vy
+                        self.v[self.op_x()] ^= self.v[self.op_y()];
+                    }
+                    0x0004 => {
+                        // Set Vx = Vx + Vy, set VF = carry.
+                        // (result, overflow)
+                        let res = self.v[self.op_x()].overflowing_add(self.v[self.op_y()]);
+                        self.v[15] = if res.1 { 1 } else { 0 };
+                        self.v[self.op_x()] = res.0;
+                    }
+
+                    0x0005 => {
+                        //Set Vx = Vx - Vy, set VF = NOT borrow
+                        let res = self.v[self.op_x()].overflowing_sub(self.v[self.op_y()]);
+
+                        self.v[15] = if res.1 { 0 } else { 1 };
+                        self.v[self.op_x()] = res.0;
+                    }
+
+                    0x0006 => {
+                        self.v[15] = self.v[self.op_x()] & 0x1;
+                        self.v[self.op_x()] >>= 1;
+                    }
+                    0x0007 => {
+                        self.v[15] = if self.v[self.op_x()] > self.v[self.op_y()] {
+                            0
+                        } else {
+                            1
+                        };
+                        self.v[self.op_x()] = self.v[self.op_y()] - self.v[self.op_x()];
+                    }
+                    0x000E => {
+                        self.v[15] = self.v[self.op_x()] >> 7;
+                        self.v[self.op_x()] <<= 1;
+                    }
+
+                    _ => {
+                        println!("Not Implemented {:x?}", self.opcode);
+                        process::exit(0x0100);
+                    }
+                }
+                self.pc += 2;
+            }
+            0x9000 => {
+                // Skip next instruction if Vx != Vy
+                if self.v[self.op_x()] != self.v[self.op_y()] {
                     self.pc += 2;
                 }
-
-                0x0002 => {
-                    // Set Vx = Vx AND Vy
-                    self.v[self.op_x()] &= self.v[self.op_y()];
-                    self.pc += 2;
-                }
-
-                0x0004 => {
-                    // Set Vx = Vx + Vy, set VF = carry.
-                    // (result, overflow)
-                    let res = self.v[self.op_x()].overflowing_add(self.v[self.op_y()]);
-
-                    self.v[15] = if res.1 { 1 } else { 0 };
-                    self.v[self.op_x()] = res.0;
-                    self.pc += 2;
-                }
-
-                0x0005 => {
-                    //Set Vx = Vx - Vy, set VF = NOT borrow
-                    let res = self.v[self.op_x()].overflowing_sub(self.v[self.op_y()]);
-
-                    self.v[15] = if res.1 { 0 } else { 1 };
-                    self.v[self.op_x()] = res.0;
-                    self.pc += 2;
-                }
-
-                _ => {
-                    println!("Not Implemented {:x?}", self.opcode);
-                    process::exit(0x0100);
-                }
-            },
+                self.pc += 2;
+            }
 
             0xA000 => {
                 //LD I, addr
                 self.i = (self.opcode & 0x0FFF) as usize;
                 self.pc += 2;
+            }
+
+            0xB000 => {
+                // Jump to location nnn + V0
+                self.pc = ((self.opcode & 0x0FFF) + self.v[0] as u16) as usize;
             }
 
             0xC000 => {
@@ -211,6 +246,7 @@ impl Cpu {
                 let size = self.opcode & 0x000F;
                 let x = self.v[self.op_x()];
                 let y = self.v[self.op_y()];
+
                 self.v[15] = self.gpu.draw_sprite(
                     x as usize,
                     y as usize,
@@ -222,7 +258,11 @@ impl Cpu {
             0xE000 => {
                 match self.opcode & 0x00FF {
                     0x009E => {
-                        println!("Not Implemented {:x?}", self.opcode);
+                        // Skip next instruction if key with the value of Vx is pressed
+                        if self.key[self.v[self.op_x()] as usize] == 1 {
+                            self.pc += 2;
+                        }
+                        self.pc += 2;
                     }
 
                     0x00A1 => {
@@ -247,9 +287,34 @@ impl Cpu {
                     self.pc += 2;
                 }
 
+                0x000A => {
+                    // Wait for a key press, store the value of the key in Vx
+                    'wait_key: loop {
+                        for i in 0..15 {
+                            if self.key[i] == 1 {
+                                self.v[self.op_x()] = i as u8;
+                                break 'wait_key;
+                            }
+                        }
+                    }
+                    self.pc += 2;
+                }
+
                 0x0015 => {
                     //LD DT, Vx
                     self.dt = self.v[self.op_x()];
+                    self.pc += 2;
+                }
+
+                0x0018 => {
+                    // Set sound timer = Vx
+                    self.st = self.v[self.op_x()];
+                    self.pc += 2;
+                }
+
+                0x001E => {
+                    // Set I = I + Vx
+                    self.i += self.v[self.op_x()] as usize;
                     self.pc += 2;
                 }
 
@@ -262,7 +327,6 @@ impl Cpu {
                 0x0033 => {
                     //LD B, Vx
                     let val = self.v[self.op_x()];
-
                     self.memory[self.i] = val / 100;
                     self.memory[self.i + 1] = val / 10 % 10;
                     self.memory[self.i + 2] = val % 100 % 10;
@@ -270,19 +334,21 @@ impl Cpu {
                     self.pc += 2;
                 }
 
+                0x0055 => {
+                    // Store registers V0 through Vx in memory starting at location I
+                    for i in 0..(self.op_x() + 1) {
+                        self.memory[self.i + i] = self.v[i];
+                    }
+                    self.pc += 2;
+                }
+
                 0x0065 => {
                     //LD Vx, [I]
                     let n = self.op_x();
 
-                    for i in 0..n {
+                    for i in 0..(n + 1) {
                         self.v[i] = self.memory[self.i + i];
                     }
-                    self.i += n + 1;
-                    self.pc += 2;
-                }
-                0x0018 => {
-                    // Set sound timer = Vx
-                    self.st = self.v[self.op_x()];
                     self.pc += 2;
                 }
 
